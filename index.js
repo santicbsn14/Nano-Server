@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url'
 import { createClient } from '@sanity/client'
 import * as xlsx from 'xlsx'
 import cors from 'cors'
-
+import 'dotenv/config'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
@@ -18,13 +18,12 @@ app.use(express.json())
 
 // ── Sanity ─────────────────────────────────────────────────────────
 const client = createClient({
-  projectId: 'osch4vsf',
+  projectId: process.env.SANITY_PROJECT_ID,
   dataset: 'production',
   useCdn: false,
   apiVersion: '2024-01-01',
-  token: 'skdqMCeX63uMXN4UQ3w9PGgwnIonHYwejG3CvfSt37fF8gdXBqzj1JQTfK5RAHdaxVylRJf4rKfLMt0uzEKsMi8reO8zXnOj2tOydGmUVOrFh7NLAP1LbX5KOyuTQVFjzUfAMqj5DzCvD9O4zog2vZk5SlKajU0IqfIRuwoHtfeaJXKap0WH',
+  token: process.env.SANITY_TOKEN,
 })
-
 // ── Multer ──────────────────────────────────────────────────────────
 const storage = multer.memoryStorage()
 const upload = multer({
