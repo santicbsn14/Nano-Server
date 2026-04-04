@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nano · Actualizar precios</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0D1B2A;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .card {
+      background: #1A3A5C;
+      border-radius: 16px;
+      padding: 40px;
+      width: 100%;
+      max-width: 480px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    }
+
+    .logo {
+      font-size: 13px;
+      font-weight: 600;
+      color: #5DADE2;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    h1 {
+      font-size: 24px;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: #7A9BBE;
+      margin-bottom: 32px;
+      line-height: 1.5;
+    }
+
+    .dropzone {
+      border: 2px dashed #2E86C1;
+      border-radius: 12px;
+      padding: 36px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-bottom: 20px;
+      position: relative;
+    }
+
+    .dropzone:hover, .dropzone.dragover {
+      border-color: #5DADE2;
+      background: rgba(46, 134, 193, 0.08);
+    }
+
+    .dropzone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+
+    .dropzone-icon { font-size: 36px; margin-bottom: 10px; }
+
+    .dropzone-text {
+      font-size: 14px;
+      color: #A0B4C8;
+    }
+
+    .dropzone-text strong {
+      color: #5DADE2;
+      display: block;
+      margin-bottom: 4px;
+      font-size: 15px;
+    }
+
+    .file-selected {
+      background: rgba(46, 134, 193, 0.15);
+      border-color: #5DADE2;
+    }
+
+    .file-name {
+      font-size: 13px;
+      color: #5DADE2;
+      margin-bottom: 20px;
+      text-align: center;
+      font-weight: 500;
+    }
+
+    button {
+      width: 100%;
+      padding: 14px;
+      background: #2E86C1;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    button:hover:not(:disabled) { background: #5DADE2; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .loader {
+      display: none;
+      text-align: center;
+      padding: 20px 0;
+      color: #7A9BBE;
+      font-size: 14px;
+    }
+
+    .loader.visible { display: block; }
+
+    .spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid #2E4A6A;
+      border-top-color: #5DADE2;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 12px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .resultado { display: none; margin-top: 24px; }
+    .resultado.visible { display: block; }
+
+    .resultado h2 {
+      font-size: 16px;
+      color: #fff;
+      margin-bottom: 16px;
+    }
+
+    .stat {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .stat.verde { background: rgba(39, 174, 96, 0.15); color: #2ecc71; }
+    .stat.amarillo { background: rgba(244, 196, 48, 0.15); color: #F4C430; }
+    .stat.rojo { background: rgba(231, 76, 60, 0.15); color: #e74c3c; }
+
+    .stat span:last-child { font-weight: 700; font-size: 18px; }
+
+    .no-encontrados {
+      margin-top: 16px;
+      background: rgba(244, 196, 48, 0.08);
+      border: 1px solid rgba(244, 196, 48, 0.2);
+      border-radius: 8px;
+      padding: 14px;
+    }
+
+    .no-encontrados h3 {
+      font-size: 13px;
+      color: #F4C430;
+      margin-bottom: 8px;
+    }
+
+    .no-encontrados ul {
+      list-style: none;
+      font-size: 12px;
+      color: #A0B4C8;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
+    .no-encontrados ul li { padding: 2px 0; }
+
+    .error-msg {
+      background: rgba(231, 76, 60, 0.15);
+      border: 1px solid rgba(231, 76, 60, 0.3);
+      border-radius: 8px;
+      padding: 14px;
+      color: #e74c3c;
+      font-size: 13px;
+      margin-top: 16px;
+    }
+
+    .btn-nuevo {
+      margin-top: 16px;
+      background: transparent;
+      border: 1px solid #2E86C1;
+      color: #5DADE2;
+      font-size: 13px;
+      padding: 10px;
+    }
+
+    .btn-nuevo:hover { background: rgba(46, 134, 193, 0.1); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">Pañalera Nano</div>
+    <h1>Actualizar precios</h1>
+    <p class="subtitle">Subí el Excel con los precios actualizados y se van a sincronizar automáticamente con el catálogo.</p>
+
+    <div class="dropzone" id="dropzone">
+      <input type="file" id="fileInput" accept=".xlsx,.xls" />
+      <div class="dropzone-icon">📊</div>
+      <div class="dropzone-text">
+        <strong>Seleccionar archivo Excel</strong>
+        .xlsx o .xls
+      </div>
+    </div>
+
+    <div class="file-name" id="fileName" style="display:none"></div>
+
+    <button id="btnActualizar" disabled>Actualizar precios</button>
+
+    <div class="loader" id="loader">
+      <div class="spinner"></div>
+      Actualizando precios, esperá un momento...
+    </div>
+
+    <div class="resultado" id="resultado"></div>
+  </div>
+
+  <script>
+    const fileInput = document.getElementById('fileInput')
+    const dropzone = document.getElementById('dropzone')
+    const fileName = document.getElementById('fileName')
+    const btnActualizar = document.getElementById('btnActualizar')
+    const loader = document.getElementById('loader')
+    const resultado = document.getElementById('resultado')
+
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files[0]
+      if (file) {
+        fileName.textContent = `📄 ${file.name}`
+        fileName.style.display = 'block'
+        dropzone.classList.add('file-selected')
+        btnActualizar.disabled = false
+      }
+    })
+
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault()
+      dropzone.classList.add('dragover')
+    })
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'))
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault()
+      dropzone.classList.remove('dragover')
+      const file = e.dataTransfer.files[0]
+      if (file) {
+        fileInput.files = e.dataTransfer.files
+        fileName.textContent = `📄 ${file.name}`
+        fileName.style.display = 'block'
+        dropzone.classList.add('file-selected')
+        btnActualizar.disabled = false
+      }
+    })
+
+    btnActualizar.addEventListener('click', async () => {
+      const file = fileInput.files[0]
+      if (!file) return
+
+      // Mostrar loader
+      btnActualizar.disabled = true
+      loader.classList.add('visible')
+      resultado.classList.remove('visible')
+      resultado.innerHTML = ''
+
+      const formData = new FormData()
+      formData.append('excel', file)
+
+      try {
+        const res = await fetch('/actualizar', { method: 'POST', body: formData })
+        const data = await res.json()
+
+        loader.classList.remove('visible')
+
+        if (!res.ok || data.error) {
+          resultado.innerHTML = `<div class="error-msg">⚠️ ${data.error}</div>`
+        } else {
+          const { actualizados, noEncontrados, sinPrecio, errores, noEncontradosList } = data.resumen
+
+          let html = `<h2>✅ ¡Listo! Resumen de la actualización</h2>`
+          html += `<div class="stat verde"><span>✓ Actualizados</span><span>${actualizados}</span></div>`
+          html += `<div class="stat amarillo"><span>⚠ No encontrados en el catálogo</span><span>${noEncontrados}</span></div>`
+          html += `<div class="stat amarillo"><span>⚠ Sin precio válido</span><span>${sinPrecio}</span></div>`
+          html += `<div class="stat rojo"><span>✗ Errores</span><span>${errores}</span></div>`
+
+          if (noEncontradosList.length > 0) {
+            html += `<div class="no-encontrados">
+              <h3>⚠ Estos productos no están cargados en el catálogo todavía:</h3>
+              <ul>${noEncontradosList.map(p => `<li>· ${p}</li>`).join('')}</ul>
+            </div>`
+          }
+
+          html += `<button class="btn-nuevo" id="btnNuevo">Actualizar otro archivo</button>`
+          resultado.innerHTML = html
+
+          document.getElementById('btnNuevo').addEventListener('click', () => {
+            fileInput.value = ''
+            fileName.style.display = 'none'
+            dropzone.classList.remove('file-selected')
+            btnActualizar.disabled = true
+            resultado.classList.remove('visible')
+            resultado.innerHTML = ''
+          })
+        }
+
+        resultado.classList.add('visible')
+      } catch (err) {
+        loader.classList.remove('visible')
+        resultado.innerHTML = `<div class="error-msg">⚠️ No se pudo conectar con el servidor.</div>`
+        resultado.classList.add('visible')
+        btnActualizar.disabled = false
+      }
+    })
+  </script>
+</body>
+</html>
