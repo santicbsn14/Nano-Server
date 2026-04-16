@@ -163,21 +163,31 @@
 
     .stat span:last-child { font-weight: 700; font-size: 18px; }
 
-    .no-encontrados {
+    .lista-detalle {
       margin-top: 16px;
-      background: rgba(244, 196, 48, 0.08);
-      border: 1px solid rgba(244, 196, 48, 0.2);
       border-radius: 8px;
       padding: 14px;
     }
 
-    .no-encontrados h3 {
+    .lista-detalle.amarillo {
+      background: rgba(244, 196, 48, 0.08);
+      border: 1px solid rgba(244, 196, 48, 0.2);
+    }
+
+    .lista-detalle.naranja {
+      background: rgba(231, 126, 34, 0.08);
+      border: 1px solid rgba(231, 126, 34, 0.2);
+    }
+
+    .lista-detalle h3 {
       font-size: 13px;
-      color: #F4C430;
       margin-bottom: 8px;
     }
 
-    .no-encontrados ul {
+    .lista-detalle.amarillo h3 { color: #F4C430; }
+    .lista-detalle.naranja h3 { color: #E77E22; }
+
+    .lista-detalle ul {
       list-style: none;
       font-size: 12px;
       color: #A0B4C8;
@@ -185,7 +195,7 @@
       overflow-y: auto;
     }
 
-    .no-encontrados ul li { padding: 2px 0; }
+    .lista-detalle ul li { padding: 2px 0; }
 
     .error-msg {
       background: rgba(231, 76, 60, 0.15);
@@ -276,7 +286,6 @@
       const file = fileInput.files[0]
       if (!file) return
 
-      // Mostrar loader
       btnActualizar.disabled = true
       loader.classList.add('visible')
       resultado.classList.remove('visible')
@@ -294,7 +303,7 @@
         if (!res.ok || data.error) {
           resultado.innerHTML = `<div class="error-msg">⚠️ ${data.error}</div>`
         } else {
-          const { actualizados, noEncontrados, sinPrecio, errores, noEncontradosList } = data.resumen
+          const { actualizados, noEncontrados, sinPrecio, errores, noEncontradosList, sinPrecioList } = data.resumen
 
           let html = `<h2>✅ ¡Listo! Resumen de la actualización</h2>`
           html += `<div class="stat verde"><span>✓ Actualizados</span><span>${actualizados}</span></div>`
@@ -302,10 +311,17 @@
           html += `<div class="stat amarillo"><span>⚠ Sin precio válido</span><span>${sinPrecio}</span></div>`
           html += `<div class="stat rojo"><span>✗ Errores</span><span>${errores}</span></div>`
 
-          if (noEncontradosList.length > 0) {
-            html += `<div class="no-encontrados">
+          if (noEncontradosList && noEncontradosList.length > 0) {
+            html += `<div class="lista-detalle amarillo">
               <h3>⚠ Estos productos no están cargados en el catálogo todavía:</h3>
               <ul>${noEncontradosList.map(p => `<li>· ${p}</li>`).join('')}</ul>
+            </div>`
+          }
+
+          if (sinPrecioList && sinPrecioList.length > 0) {
+            html += `<div class="lista-detalle naranja">
+              <h3>⚠ Estos productos no tenían precio válido en el Excel:</h3>
+              <ul>${sinPrecioList.map(p => `<li>· ${p}</li>`).join('')}</ul>
             </div>`
           }
 

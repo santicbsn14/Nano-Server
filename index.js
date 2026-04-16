@@ -139,6 +139,7 @@ app.post('/actualizar', upload.single('excel'), async (req, res) => {
     let sinPrecio = 0
     let errores = 0
     const noEncontradosList = []
+    const sinPrecioList = []
     const patches = []
 
     for (const fila of filas) {
@@ -151,6 +152,7 @@ app.post('/actualizar', upload.single('excel'), async (req, res) => {
       const precio = limpiarPrecio(precioRaw)
       if (precio === null) {
         sinPrecio++
+        sinPrecioList.push(`[${idSistema}] ${nombreProducto}`)
         continue
       }
 
@@ -186,7 +188,7 @@ app.post('/actualizar', upload.single('excel'), async (req, res) => {
 
     res.json({
       ok: true,
-      resumen: { actualizados, noEncontrados, sinPrecio, errores, noEncontradosList },
+      resumen: { actualizados, noEncontrados, sinPrecio, errores, noEncontradosList, sinPrecioList,},
     })
   } catch (err) {
     res.status(500).json({ error: `Error procesando el archivo: ${err.message}` })
