@@ -46,6 +46,9 @@ app.use(express.static(path.join(__dirname, 'public')))
 // ── Función para limpiar precio ────────────────────────────────────
 function limpiarPrecio(valor) {
   if (!valor) return null
+  // Si ya es número, redondearlo directamente
+  if (typeof valor === 'number') return Math.round(valor)
+  // Si es string con formato argentino (3.093,30)
   const limpio = String(valor).replace(/\./g, '').replace(',', '.')
   const numero = parseFloat(limpio)
   return isNaN(numero) ? null : Math.round(numero)
