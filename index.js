@@ -48,7 +48,7 @@ function limpiarPrecio(valor) {
   if (!valor) return null
   const limpio = String(valor).replace(/\./g, '').replace(',', '.')
   const numero = parseFloat(limpio)
-  return isNaN(numero) ? null : numero
+  return isNaN(numero) ? null : Math.round(numero)
 }
 
 // ── Endpoint: guardar pedido ───────────────────────────────────────
@@ -194,7 +194,15 @@ app.post('/actualizar', upload.single('excel'), async (req, res) => {
     res.status(500).json({ error: `Error procesando el archivo: ${err.message}` })
   }
 })
-
+// ── Endpoint: login ────────────────────────────────────────────────
+app.post('/login', (req, res) => {
+  const { clave } = req.body
+  if (clave === process.env.ADMIN_PASSWORD) {
+    res.json({ ok: true })
+  } else {
+    res.status(401).json({ ok: false, error: 'Contraseña incorrecta' })
+  }
+})
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`)
 })
