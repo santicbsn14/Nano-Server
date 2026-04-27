@@ -110,6 +110,42 @@ app.get('/pedido/:id', async (req, res) => {
   }
 })
 
+// ── Endpoint: pedidos por rango de fechas ──────────────────────
+app.get('/pedidos', async (req, res) => {
+  const { desde, hasta } = req.query
+
+  if (!desde || !hasta) {
+    return res.status(400).json({ error: 'Faltan parámetros desde y hasta' })
+  }
+
+  try {
+    const pedidos = await client.fetch(
+      `*[_type == "pedido" && fecha >= $desde && fecha <= $hasta] | order(fecha desc) {
+        _id,
+        numeroPedido,
+        fecha,
+        nombre,
+        ciudad,
+        direccion,
+        fecha_retiro,
+        turno,
+        envio,
+        aclaracion,
+        items,
+        total
+      }`,
+      {
+        desde: `${desde}T00:00:00.000Z`,
+        hasta: `${hasta}T23:59:59.999Z`,
+      }
+    )
+    res.json({ ok: true, pedidos })
+  } catch (err) {
+    console.error('Error obteniendo pedidos:', err)
+    res.status(500).json({ error: 'Error obteniendo pedidos.' })
+  }
+})
+
 // ── Endpoint: actualizar precios (OPTIMIZADO) ──────────────────────
 app.post('/actualizar', upload.single('excel'), async (req, res) => {
   if (!req.file) {
