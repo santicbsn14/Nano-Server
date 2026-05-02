@@ -236,13 +236,14 @@ app.post('/actualizar', upload.single('excel'), async (req, res) => {
 // ── Endpoint: buscar productos ─────────────────────────────────
 app.get('/productos/buscar', async (req, res) => {
   const { q } = req.query
-  if (!q) return res.status(400).json({ error: 'Falta el parámetro q' })
   try {
+    const filtro = q && q.trim()
+      ? `_type == "producto" && (nombre match $q || descripcion match $q)`
+      : `_type == "producto"`
+    
     const productos = await client.fetch(
-      `*[_type == "producto" && (nombre match $q || descripcion match $q)] | order(nombre asc) [0...50] {
-        _id, nombre, descripcion, talle, categoria, enStock, precio
-      }`,
-      { q: `*${q}*` }
+      `*[${filtro}] | order(nombre asc) [0...100] { _id, nombre, descripcion, talle, categoria, enStock, precio }`,
+      q ? { q: `*${q}*` } : {}
     )
     res.json({ ok: true, productos })
   } catch (err) {
