@@ -80,7 +80,11 @@ app.post('/pedido', async (req, res) => {
         _key: Math.random().toString(36).substring(2, 9),
         nombre: i.nombre,
         talle: i.talle ?? '',
-        tallesCombo: i.tallesCombo ?? [],
+        tallesCombo: (i.tallesCombo ?? []).map((t) => ({
+  _key: Math.random().toString(36).substring(2, 9),
+  producto: t.producto,
+  talle: t.talle,
+})),
         presentacion: i.presentacion ?? '',
         descripcion: i.descripcion ?? '',
         precio: i.precio,
