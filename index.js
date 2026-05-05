@@ -61,6 +61,7 @@ app.post('/pedido', async (req, res) => {
   if (!nombre || !items || items.length === 0) {
     return res.status(400).json({ error: 'Datos del pedido incompletos.' })
   }
+  console.log('Items recibidos:', JSON.stringify(items, null, 2))
 
   try {
     const numeroPedido = Math.random().toString(36).substring(2, 10).toUpperCase()
