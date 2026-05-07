@@ -56,7 +56,7 @@ function limpiarPrecio(valor) {
 
 // ── Endpoint: guardar pedido ───────────────────────────────────────
 app.post('/pedido', async (req, res) => {
-  const { nombre, ciudad, direccion, fecha_retiro, turno, envio, aclaracion, items, total } = req.body
+  const { nombre, telefono, ciudad, direccion, fecha_retiro, turno, envio, aclaracion, items, total } = req.body
 
   if (!nombre || !items || items.length === 0) {
     return res.status(400).json({ error: 'Datos del pedido incompletos.' })
@@ -71,6 +71,7 @@ app.post('/pedido', async (req, res) => {
       numeroPedido,
       fecha: new Date().toISOString(),
       nombre,
+      telefono: telefono ?? '',
       ciudad,
       direccion,
       fecha_retiro: fecha_retiro ?? '',
