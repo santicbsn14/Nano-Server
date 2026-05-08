@@ -61,7 +61,6 @@ app.post('/pedido', async (req, res) => {
   if (!nombre || !items || items.length === 0) {
     return res.status(400).json({ error: 'Datos del pedido incompletos.' })
   }
-  console.log('Items recibidos:', JSON.stringify(items, null, 2))
 
   try {
     const numeroPedido = Math.random().toString(36).substring(2, 10).toUpperCase()
@@ -107,9 +106,23 @@ app.get('/pedido/:id', async (req, res) => {
   const { id } = req.params
   try {
     const pedido = await client.fetch(
-      `*[_type == "pedido" && _id == $id][0]`,
-      { id }
-    )
+  `*[_type == "pedido" && _id == $id][0]{
+    _id,
+    numeroPedido,
+    fecha,
+    nombre,
+    telefono,
+    ciudad,
+    direccion,
+    fecha_retiro,
+    turno,
+    envio,
+    aclaracion,
+    items,
+    total
+  }`,
+  { id }
+)
     if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado.' })
     res.json(pedido)
   } catch (err) {
@@ -132,6 +145,7 @@ app.get('/pedidos', async (req, res) => {
         numeroPedido,
         fecha,
         nombre,
+        telefono,
         ciudad,
         direccion,
         fecha_retiro,
