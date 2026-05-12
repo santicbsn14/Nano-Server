@@ -256,14 +256,15 @@ app.post('/actualizar', upload.single('excel'), async (req, res) => {
 })
 // ── Endpoint: buscar productos ─────────────────────────────────
 app.get('/productos/buscar', async (req, res) => {
-  const { q } = req.query
+  const { q, offset = 0 } = req.query
+  const inicio = Number(offset)
   try {
     const filtro = q && q.trim()
       ? `_type == "producto" && (nombre match $q || descripcion match $q)`
       : `_type == "producto"`
     
     const productos = await client.fetch(
-      `*[${filtro}] | order(nombre asc) [0...100] { _id, nombre, descripcion, talle, categoria, enStock, precio }`,
+      `*[${filtro}] | order(nombre asc) [${inicio}...${inicio + 100}] { _id, nombre, descripcion, talle, categoria, enStock, precio }`,
       q ? { q: `*${q}*` } : {}
     )
     res.json({ ok: true, productos })
