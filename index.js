@@ -293,6 +293,57 @@ app.post('/login', (req, res) => {
     res.status(401).json({ ok: false, error: 'Contraseña incorrecta' })
   }
 })
+// ── Endpoint: productos más vendidos por rango de fechas ───────────
+app.get('/productos/mas-vendidos', async (req, res) => {
+  const { desde, hasta } = req.query
+
+  if (!desde || !hasta) {
+    return res.status(400).json({ error: 'Faltan parámetros desde y hasta' })
+  }
+
+  try {
+    // Traemos solo los items de cada pedido — no necesitamos el resto
+    const pedidos = await client.fetch(
+      `*[_type == "pedido" && fecha >= $desde && fecha <= $hasta]{
+        "items": items[]{ nombre, cantidad, precio }
+      }`,
+      {
+        desde: `${desde}T00:00:00.000Z`,
+        hasta: `${hasta}T23:59:59.999Z`,
+      }
+    )
+
+    // Cruzar todos los items de todos los pedidos
+    const mapa = new Map()
+    for (const pedido of pedidos) {
+      for (const item of (pedido.items ?? [])) {
+        const key = item.nombre?.trim() ?? '—'
+        if (mapa.has(key)) {
+          const existente = mapa.get(key)
+          existente.unidades += item.cantidad ?? 0
+          existente.total += (item.precio ?? 0) * (item.cantidad ?? 0)
+          existente.apariciones += 1
+        } else {
+          mapa.set(key, {
+            nombre: key,
+            unidades: item.cantidad ?? 0,
+            total: (item.precio ?? 0) * (item.cantidad ?? 0),
+            apariciones: 1,
+          })
+        }
+      }
+    }
+
+    // Ordenar por unidades desc
+    const ranking = Array.from(mapa.values())
+      .sort((a, b) => b.unidades - a.unidades)
+
+    res.json({ ok: true, ranking, totalPedidos: pedidos.length })
+  } catch (err) {
+    console.error('Error calculando más vendidos:', err)
+    res.status(500).json({ error: 'Error calculando más vendidos.' })
+  }
+})
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`)
 })
