@@ -46,9 +46,7 @@ app.use(express.static(path.join(__dirname, 'public')))
 // ── Función para limpiar precio ────────────────────────────────────
 function limpiarPrecio(valor) {
   if (!valor) return null
-  // Si ya es número, redondearlo directamente
   if (typeof valor === 'number') return Math.round(valor)
-  // Si es string con formato argentino (3.093,30)
   const limpio = String(valor).replace(/\./g, '').replace(',', '.')
   const numero = parseFloat(limpio)
   return isNaN(numero) ? null : Math.round(numero)
@@ -82,10 +80,10 @@ app.post('/pedido', async (req, res) => {
         nombre: i.nombre,
         talle: i.talle ?? '',
         tallesCombo: (i.tallesCombo ?? []).map((t) => ({
-  _key: Math.random().toString(36).substring(2, 9),
-  producto: t.producto,
-  talle: t.talle,
-})),
+          _key: Math.random().toString(36).substring(2, 9),
+          producto: t.producto,
+          talle: t.talle,
+        })),
         presentacion: i.presentacion ?? '',
         descripcion: i.descripcion ?? '',
         precio: i.precio,
@@ -106,23 +104,23 @@ app.get('/pedido/:id', async (req, res) => {
   const { id } = req.params
   try {
     const pedido = await client.fetch(
-  `*[_type == "pedido" && _id == $id][0]{
-    _id,
-    numeroPedido,
-    fecha,
-    nombre,
-    telefono,
-    ciudad,
-    direccion,
-    fecha_retiro,
-    turno,
-    envio,
-    aclaracion,
-    items,
-    total
-  }`,
-  { id }
-)
+      `*[_type == "pedido" && _id == $id][0]{
+        _id,
+        numeroPedido,
+        fecha,
+        nombre,
+        telefono,
+        ciudad,
+        direccion,
+        fecha_retiro,
+        turno,
+        envio,
+        aclaracion,
+        items,
+        total
+      }`,
+      { id }
+    )
     if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado.' })
     res.json(pedido)
   } catch (err) {
@@ -178,13 +176,11 @@ app.post('/actualizar', upload.single('excel'), async (req, res) => {
     const hoja = workbook.Sheets[workbook.SheetNames[0]]
     const filas = xlsx.utils.sheet_to_json(hoja)
 
-    // ── 1. Traer TODOS los productos de Sanity de una sola vez ──
     console.log('Trayendo todos los productos de Sanity...')
     const productosDB = await client.fetch(
       `*[_type == "producto"]{ _id, idSistema, nombre }`
     )
 
-    // Crear un mapa idSistema → { _id, nombre } para búsqueda O(1)
     const mapaProductos = {}
     for (const p of productosDB) {
       if (p.idSistema != null) {
@@ -193,7 +189,6 @@ app.post('/actualizar', upload.single('excel'), async (req, res) => {
     }
     console.log(`${productosDB.length} productos cargados en memoria`)
 
-    // ── 2. Preparar los patches ──
     let actualizados = 0
     let noEncontrados = 0
     let sinPrecio = 0
@@ -226,7 +221,6 @@ app.post('/actualizar', upload.single('excel'), async (req, res) => {
       patches.push({ _id: producto._id, precio })
     }
 
-    // ── 3. Aplicar patches en lotes de 50 ──
     const LOTE = 50
     console.log(`Aplicando ${patches.length} actualizaciones en lotes de ${LOTE}...`)
 
@@ -248,12 +242,13 @@ app.post('/actualizar', upload.single('excel'), async (req, res) => {
 
     res.json({
       ok: true,
-      resumen: { actualizados, noEncontrados, sinPrecio, errores, noEncontradosList, sinPrecioList,},
+      resumen: { actualizados, noEncontrados, sinPrecio, errores, noEncontradosList, sinPrecioList },
     })
   } catch (err) {
     res.status(500).json({ error: `Error procesando el archivo: ${err.message}` })
   }
 })
+
 // ── Endpoint: buscar productos ─────────────────────────────────
 app.get('/productos/buscar', async (req, res) => {
   const { q, offset = 0 } = req.query
@@ -262,7 +257,7 @@ app.get('/productos/buscar', async (req, res) => {
     const filtro = q && q.trim()
       ? `_type == "producto" && (nombre match $q || descripcion match $q)`
       : `_type == "producto"`
-    
+
     const productos = await client.fetch(
       `*[${filtro}] | order(nombre asc) [${inicio}...${inicio + 100}] { _id, nombre, descripcion, talle, categoria, enStock, precio }`,
       q ? { q: `*${q}*` } : {}
@@ -284,6 +279,7 @@ app.patch('/producto/:id/stock', async (req, res) => {
     res.status(500).json({ error: 'Error actualizando stock.' })
   }
 })
+
 // ── Endpoint: login ────────────────────────────────────────────────
 app.post('/login', (req, res) => {
   const { clave } = req.body
@@ -293,6 +289,7 @@ app.post('/login', (req, res) => {
     res.status(401).json({ ok: false, error: 'Contraseña incorrecta' })
   }
 })
+
 // ── Endpoint: productos más vendidos por rango de fechas ───────────
 app.get('/productos/mas-vendidos', async (req, res) => {
   const { desde, hasta } = req.query
@@ -302,10 +299,10 @@ app.get('/productos/mas-vendidos', async (req, res) => {
   }
 
   try {
-    // Traemos solo los items de cada pedido — no necesitamos el resto
+    // Traemos nombre, talle, cantidad y precio de cada item
     const pedidos = await client.fetch(
       `*[_type == "pedido" && fecha >= $desde && fecha <= $hasta]{
-        "items": items[]{ nombre, cantidad, precio }
+        "items": items[]{ nombre, talle, cantidad, precio }
       }`,
       {
         desde: `${desde}T00:00:00.000Z`,
@@ -313,11 +310,14 @@ app.get('/productos/mas-vendidos', async (req, res) => {
       }
     )
 
-    // Cruzar todos los items de todos los pedidos
+    // Agrupar por nombre + talle — el frontend decide si colapsar por nombre
     const mapa = new Map()
     for (const pedido of pedidos) {
       for (const item of (pedido.items ?? [])) {
-        const key = item.nombre?.trim() ?? '—'
+        const nombre = item.nombre?.trim() ?? '—'
+        const talle = item.talle?.trim() ?? ''
+        const key = `${nombre}__${talle}`
+
         if (mapa.has(key)) {
           const existente = mapa.get(key)
           existente.unidades += item.cantidad ?? 0
@@ -325,7 +325,8 @@ app.get('/productos/mas-vendidos', async (req, res) => {
           existente.apariciones += 1
         } else {
           mapa.set(key, {
-            nombre: key,
+            nombre,
+            talle,
             unidades: item.cantidad ?? 0,
             total: (item.precio ?? 0) * (item.cantidad ?? 0),
             apariciones: 1,
@@ -334,7 +335,7 @@ app.get('/productos/mas-vendidos', async (req, res) => {
       }
     }
 
-    // Ordenar por unidades desc
+    // Devolver siempre desglosado por talle — el frontend agrupa si hace falta
     const ranking = Array.from(mapa.values())
       .sort((a, b) => b.unidades - a.unidades)
 
@@ -344,6 +345,7 @@ app.get('/productos/mas-vendidos', async (req, res) => {
     res.status(500).json({ error: 'Error calculando más vendidos.' })
   }
 })
+
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`)
 })
