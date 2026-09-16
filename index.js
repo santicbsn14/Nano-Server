@@ -20,7 +20,7 @@ app.use(express.json())
 // ── Sanity ─────────────────────────────────────────────────────────
 const client = createClient({
   projectId: process.env.SANITY_PROJECT_ID,
-  dataset: 'production',
+  dataset: process.env.SANITY_DATASET || 'production',
   useCdn: false,
   apiVersion: '2024-01-01',
   token: process.env.SANITY_TOKEN,
@@ -83,6 +83,11 @@ app.post('/pedido', async (req, res) => {
           _key: Math.random().toString(36).substring(2, 9),
           producto: t.producto,
           talle: t.talle,
+        })),
+        productosInternos: (i.productosInternos ?? []).map((p) => ({
+          _key: Math.random().toString(36).substring(2, 9),
+          nombre: p.nombre,
+          descripcionCorta: p.descripcionCorta ?? '',
         })),
         presentacion: i.presentacion ?? '',
         descripcion: i.descripcion ?? '',
