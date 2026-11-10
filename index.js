@@ -170,6 +170,28 @@ app.get('/pedidos', async (req, res) => {
   }
 })
 
+// ── Helpers del actualizador: transacción por lote + reintentos ────
+const MAX_INTENTOS = 5
+const PAUSA_ENTRE_LOTES_MS = 300
+const esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+async function commitLoteConReintentos(lote, nroLote) {
+  for (let intento = 1; intento <= MAX_INTENTOS; intento++) {
+    try {
+      const tx = client.transaction()
+      for (const p of lote) tx.patch(p._id, { set: { precio: p.precio } })
+      await tx.commit()
+      return
+    } catch (err) {
+      const esRateLimit = err.statusCode === 429 || /rate limit/i.test(err.message ?? '')
+      if (!esRateLimit || intento === MAX_INTENTOS) throw err
+      const espera = 1000 * 2 ** (intento - 1) // 1s, 2s, 4s, 8s
+      console.warn(`Lote ${nroLote}: rate limit, reintento ${intento}/${MAX_INTENTOS - 1} en ${espera}ms`)
+      await esperar(espera)
+    }
+  }
+}
+
 // ── Endpoint: actualizar precios (OPTIMIZADO) ──────────────────────
 app.post('/actualizar', upload.single('excel'), async (req, res) => {
   if (!req.file) {
@@ -226,21 +248,23 @@ app.post('/actualizar', upload.single('excel'), async (req, res) => {
       patches.push({ _id: producto._id, precio })
     }
 
-    const LOTE = 50
+    // Cada lote va en UNA transacción (1 request a Sanity), en serie y con
+    // reintentos. Antes eran 50 requests en paralelo por lote → rate limit.
+    const LOTE = 100
     console.log(`Aplicando ${patches.length} actualizaciones en lotes de ${LOTE}...`)
 
     for (let i = 0; i < patches.length; i += LOTE) {
       const lote = patches.slice(i, i + LOTE)
+      const nroLote = Math.floor(i / LOTE) + 1
       try {
-        await Promise.all(
-          lote.map((p) => client.patch(p._id).set({ precio: p.precio }).commit())
-        )
+        await commitLoteConReintentos(lote, nroLote)
         actualizados += lote.length
-        console.log(`Lote ${Math.floor(i / LOTE) + 1} completado — ${actualizados}/${patches.length}`)
+        console.log(`Lote ${nroLote} completado — ${actualizados}/${patches.length}`)
       } catch (err) {
         errores += lote.length
-        console.error(`Error en lote ${Math.floor(i / LOTE) + 1}:`, err.message)
+        console.error(`Error en lote ${nroLote}:`, err.message)
       }
+      await esperar(PAUSA_ENTRE_LOTES_MS)
     }
 
     console.log('Actualización completada!')
