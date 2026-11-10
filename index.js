@@ -56,15 +56,27 @@ function limpiarPrecio(valor) {
 app.post('/pedido', async (req, res) => {
   const { nombre, telefono, ciudad, direccion, fecha_retiro, turno, envio, aclaracion, items, total } = req.body
 
+  const { idPedido } = req.body
+
+  console.log('[pedido] recibido', { idPedido, nombre, items: items?.length, total })
+
   if (!nombre || !items || items.length === 0) {
+    console.warn('[pedido] rechazado', 'datos incompletos')
     return res.status(400).json({ error: 'Datos del pedido incompletos.' })
   }
 
-  try {
-    const numeroPedido = Math.random().toString(36).substring(2, 10).toUpperCase()
+  // idPedido es opcional: si viene, el pedido es idempotente (reintentos no duplican)
+  if (idPedido != null && (typeof idPedido !== 'string' || !/^[a-zA-Z0-9-]{8,64}$/.test(idPedido))) {
+    console.warn('[pedido] rechazado', 'idPedido inválido')
+    return res.status(400).json({ error: 'idPedido inválido' })
+  }
 
-    const pedido = await client.create({
-      _type: 'pedido',
+  try {
+    const numeroPedido = idPedido
+      ? idPedido.replace(/-/g, '').substring(0, 8).toUpperCase()
+      : Math.random().toString(36).substring(2, 10).toUpperCase()
+
+    const datosPedido = {
       numeroPedido,
       fecha: new Date().toISOString(),
       nombre,
@@ -95,11 +107,36 @@ app.post('/pedido', async (req, res) => {
         cantidad: i.cantidad,
       })),
       total,
-    })
+    }
 
-    res.json({ ok: true, numeroPedido, pedidoId: pedido._id })
+    let pedidoId
+    if (idPedido) {
+      const _id = `pedido-${idPedido}`
+      const resultado = await client.createIfNotExists(
+        { _id, _type: 'pedido', ...datosPedido },
+        { returnDocuments: false }
+      )
+      pedidoId = _id
+      if (resultado.results?.[0]?.operation === 'create') {
+        console.log('[pedido] guardado', { _id, numeroPedido })
+      } else {
+        console.log('[pedido] ya existía (reintento)', { _id })
+      }
+    } else {
+      const pedido = await client.create({ _type: 'pedido', ...datosPedido })
+      pedidoId = pedido._id
+      console.log('[pedido] guardado', { _id: pedidoId, numeroPedido })
+    }
+
+    res.json({ ok: true, numeroPedido, pedidoId })
   } catch (err) {
-    console.error('Error guardando pedido:', err)
+    console.error('[pedido] ERROR', {
+      idPedido,
+      nombre,
+      mensaje: err.message,
+      status: err.statusCode,
+      detalle: err.details ?? err.response?.body,
+    })
     res.status(500).json({ error: 'No se pudo guardar el pedido.' })
   }
 })
