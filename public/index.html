@@ -160,6 +160,14 @@
     .stat.verde { background: rgba(39, 174, 96, 0.15); color: #2ecc71; }
     .stat.amarillo { background: rgba(244, 196, 48, 0.15); color: #F4C430; }
     .stat.rojo { background: rgba(231, 76, 60, 0.15); color: #e74c3c; }
+    .stat.naranja { background: rgba(231, 126, 34, 0.15); color: #E77E22; }
+
+    .nota-gris {
+      font-size: 13px;
+      color: #7A9BBE;
+      margin: 4px 0 8px;
+      line-height: 1.4;
+    }
 
     .stat span:last-child { font-weight: 700; font-size: 18px; }
 
@@ -304,12 +312,20 @@
           resultado.innerHTML = `<div class="error-msg">⚠️ ${data.error}</div>`
         } else {
           const { actualizados, noEncontrados, sinPrecio, errores, noEncontradosList, sinPrecioList } = data.resumen
+          const { conColumnaFinal, sinPrecioMinorista, sinPrecioMinoristaList, publicoMenor, publicoMenorList } = data.resumen
 
           let html = `<h2>✅ ¡Listo! Resumen de la actualización</h2>`
           html += `<div class="stat verde"><span>✓ Actualizados</span><span>${actualizados}</span></div>`
           html += `<div class="stat amarillo"><span>⚠ No encontrados en el catálogo</span><span>${noEncontrados}</span></div>`
-          html += `<div class="stat amarillo"><span>⚠ Sin precio válido</span><span>${sinPrecio}</span></div>`
+          html += `<div class="stat amarillo"><span>⚠ Sin precio mayorista</span><span>${sinPrecio}</span></div>`
           html += `<div class="stat rojo"><span>✗ Errores</span><span>${errores}</span></div>`
+
+          if (conColumnaFinal) {
+            html += `<div class="stat amarillo"><span>⚠ Sin precio al público</span><span>${sinPrecioMinorista}</span></div>`
+            html += `<div class="stat naranja"><span>⚠ Precio al público menor al mayorista</span><span>${publicoMenor}</span></div>`
+          } else {
+            html += `<p class="nota-gris">Este archivo no trae la columna Final: no se actualizaron los precios de NanoYA.</p>`
+          }
 
           if (noEncontradosList && noEncontradosList.length > 0) {
             html += `<div class="lista-detalle amarillo">
@@ -322,6 +338,20 @@
             html += `<div class="lista-detalle naranja">
               <h3>⚠ Estos productos no tenían precio válido en el Excel:</h3>
               <ul>${sinPrecioList.map(p => `<li>· ${p}</li>`).join('')}</ul>
+            </div>`
+          }
+
+          if (conColumnaFinal && sinPrecioMinoristaList && sinPrecioMinoristaList.length > 0) {
+            html += `<div class="lista-detalle amarillo">
+              <h3>⚠ Estos productos no tenían precio al público válido en el Excel:</h3>
+              <ul>${sinPrecioMinoristaList.map(p => `<li>· ${p}</li>`).join('')}</ul>
+            </div>`
+          }
+
+          if (conColumnaFinal && publicoMenorList && publicoMenorList.length > 0) {
+            html += `<div class="lista-detalle naranja">
+              <h3>⚠ Estos productos tienen precio al público menor al mayorista (igual se actualizaron):</h3>
+              <ul>${publicoMenorList.map(p => `<li>· ${p}</li>`).join('')}</ul>
             </div>`
           }
 
