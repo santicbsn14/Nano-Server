@@ -56,9 +56,9 @@ function limpiarPrecio(valor) {
 app.post('/pedido', async (req, res) => {
   const { nombre, telefono, ciudad, direccion, fecha_retiro, turno, envio, aclaracion, items, total } = req.body
 
-  const { idPedido } = req.body
+  const { idPedido, canal } = req.body
 
-  console.log('[pedido] recibido', { idPedido, nombre, items: items?.length, total })
+  console.log('[pedido] recibido', { idPedido, canal, nombre, items: items?.length, total })
 
   if (!nombre || !items || items.length === 0) {
     console.warn('[pedido] rechazado', 'datos incompletos')
@@ -69,6 +69,12 @@ app.post('/pedido', async (req, res) => {
   if (idPedido != null && (typeof idPedido !== 'string' || !/^[a-zA-Z0-9-]{8,64}$/.test(idPedido))) {
     console.warn('[pedido] rechazado', 'idPedido inválido')
     return res.status(400).json({ error: 'idPedido inválido' })
+  }
+
+  // canal es opcional: sin canal (web mayorista actual) → 'mayorista'
+  if (canal != null && canal !== 'mayorista' && canal !== 'minorista') {
+    console.warn('[pedido] rechazado', 'canal inválido')
+    return res.status(400).json({ error: 'canal inválido' })
   }
 
   try {
@@ -107,6 +113,7 @@ app.post('/pedido', async (req, res) => {
         cantidad: i.cantidad,
       })),
       total,
+      canal: canal === 'minorista' ? 'minorista' : 'mayorista',
     }
 
     let pedidoId
@@ -159,7 +166,8 @@ app.get('/pedido/:id', async (req, res) => {
         envio,
         aclaracion,
         items,
-        total
+        total,
+        "canal": coalesce(canal, "mayorista")
       }`,
       { id }
     )
@@ -170,6 +178,21 @@ app.get('/pedido/:id', async (req, res) => {
   }
 })
 
+// ── Filtro por canal (whitelist: nunca se concatena lo que viene en la URL) ──
+// Pedidos viejos sin `canal` son mayoristas.
+const FILTROS_CANAL = {
+  todos: '',
+  mayorista: ' && (!defined(canal) || canal == "mayorista")',
+  minorista: ' && canal == "minorista"',
+}
+
+// Devuelve el fragmento GROQ para ?canal=, '' si no viene, o null si es inválido
+function filtroCanal(canal) {
+  if (canal == null || canal === '') return ''
+  if (typeof canal !== 'string' || !Object.prototype.hasOwnProperty.call(FILTROS_CANAL, canal)) return null
+  return FILTROS_CANAL[canal]
+}
+
 // ── Endpoint: pedidos por rango de fechas ──────────────────────
 app.get('/pedidos', async (req, res) => {
   const { desde, hasta } = req.query
@@ -178,9 +201,14 @@ app.get('/pedidos', async (req, res) => {
     return res.status(400).json({ error: 'Faltan parámetros desde y hasta' })
   }
 
+  const filtro = filtroCanal(req.query.canal)
+  if (filtro === null) {
+    return res.status(400).json({ error: 'canal inválido' })
+  }
+
   try {
     const pedidos = await client.fetch(
-      `*[_type == "pedido" && fecha >= $desde && fecha <= $hasta] | order(fecha desc) {
+      `*[_type == "pedido" && fecha >= $desde && fecha <= $hasta${filtro}] | order(fecha desc) {
         _id,
         numeroPedido,
         fecha,
@@ -193,7 +221,8 @@ app.get('/pedidos', async (req, res) => {
         envio,
         aclaracion,
         items,
-        total
+        total,
+        "canal": coalesce(canal, "mayorista")
       }`,
       {
         desde: `${desde}T00:00:00.000Z`,
@@ -216,7 +245,7 @@ async function commitLoteConReintentos(lote, nroLote) {
   for (let intento = 1; intento <= MAX_INTENTOS; intento++) {
     try {
       const tx = client.transaction()
-      for (const p of lote) tx.patch(p._id, { set: { precio: p.precio } })
+      for (const p of lote) tx.patch(p._id, { set: p.set })
       await tx.commit()
       return
     } catch (err) {
@@ -240,6 +269,16 @@ app.post('/actualizar', upload.single('excel'), async (req, res) => {
     const hoja = workbook.Sheets[workbook.SheetNames[0]]
     const filas = xlsx.utils.sheet_to_json(hoja)
 
+    // ¿El archivo trae la columna `Final` (precio al público / NanoYA)?
+    // Se mira la fila de encabezados de la hoja, no la primera fila de datos
+    // (sheet_to_json omite las celdas vacías). Excel viejo de 2 columnas → false.
+    const rangoEncabezados = xlsx.utils.decode_range(hoja['!ref'] ?? 'A1')
+    rangoEncabezados.e.r = rangoEncabezados.s.r
+    const encabezados = (xlsx.utils.sheet_to_json(hoja, { header: 1, range: rangoEncabezados })[0] ?? [])
+      .map((h) => String(h ?? '').trim())
+    const conColumnaFinal = encabezados.includes('Final')
+    console.log(`Columna Final (precio al público): ${conColumnaFinal ? 'sí' : 'no'}`)
+
     console.log('Trayendo todos los productos de Sanity...')
     const productosDB = await client.fetch(
       `*[_type == "producto"]{ _id, idSistema, nombre }`
@@ -259,6 +298,10 @@ app.post('/actualizar', upload.single('excel'), async (req, res) => {
     let errores = 0
     const noEncontradosList = []
     const sinPrecioList = []
+    let sinPrecioMinorista = 0
+    const sinPrecioMinoristaList = []
+    let publicoMenor = 0
+    const publicoMenorList = []
     const patches = []
 
     for (const fila of filas) {
@@ -268,12 +311,19 @@ app.post('/actualizar', upload.single('excel'), async (req, res) => {
 
       if (!idSistema || idSistema === 'undefined') continue
 
+      // Cada precio se valida por separado; si faltan los dos, se saltea la fila
       const precio = limpiarPrecio(precioRaw)
+      const precioMinorista = conColumnaFinal ? limpiarPrecio(fila['Final']) : null
+
       if (precio === null) {
         sinPrecio++
         sinPrecioList.push(`[${idSistema}] ${nombreProducto}`)
-        continue
       }
+      if (conColumnaFinal && precioMinorista === null) {
+        sinPrecioMinorista++
+        sinPrecioMinoristaList.push(`[${idSistema}] ${nombreProducto}`)
+      }
+      if (precio === null && precioMinorista === null) continue
 
       const producto = mapaProductos[idSistema]
       if (!producto) {
@@ -282,7 +332,17 @@ app.post('/actualizar', upload.single('excel'), async (req, res) => {
         continue
       }
 
-      patches.push({ _id: producto._id, precio })
+      const set = {}
+      if (precio !== null) set.precio = precio
+      if (precioMinorista !== null) set.precioMinorista = precioMinorista
+
+      // Aviso: público menor al mayorista (igual se actualiza)
+      if (precio !== null && precioMinorista !== null && precioMinorista < precio) {
+        publicoMenor++
+        publicoMenorList.push(`[${idSistema}] ${nombreProducto} — público $${precioMinorista} / mayorista $${precio}`)
+      }
+
+      patches.push({ _id: producto._id, set })
     }
 
     // Cada lote va en UNA transacción (1 request a Sanity), en serie y con
@@ -308,7 +368,10 @@ app.post('/actualizar', upload.single('excel'), async (req, res) => {
 
     res.json({
       ok: true,
-      resumen: { actualizados, noEncontrados, sinPrecio, errores, noEncontradosList, sinPrecioList },
+      resumen: {
+        actualizados, noEncontrados, sinPrecio, errores, noEncontradosList, sinPrecioList,
+        conColumnaFinal, sinPrecioMinorista, sinPrecioMinoristaList, publicoMenor, publicoMenorList,
+      },
     })
   } catch (err) {
     res.status(500).json({ error: `Error procesando el archivo: ${err.message}` })
@@ -364,10 +427,15 @@ app.get('/productos/mas-vendidos', async (req, res) => {
     return res.status(400).json({ error: 'Faltan parámetros desde y hasta' })
   }
 
+  const filtro = filtroCanal(req.query.canal)
+  if (filtro === null) {
+    return res.status(400).json({ error: 'canal inválido' })
+  }
+
   try {
     // Traemos nombre, talle, cantidad y precio de cada item
     const pedidos = await client.fetch(
-      `*[_type == "pedido" && fecha >= $desde && fecha <= $hasta]{
+      `*[_type == "pedido" && fecha >= $desde && fecha <= $hasta${filtro}]{
         "items": items[]{ nombre, talle, cantidad, precio }
       }`,
       {
