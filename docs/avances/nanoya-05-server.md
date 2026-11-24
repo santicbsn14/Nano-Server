@@ -128,3 +128,55 @@ publicoMenor: 1 ([4485] … — público $1000 / mayorista $1898)
 El 608 recibió solo `precioMinorista` (su `precio` quedó en 4521), el 1266 solo `precio` (su `precioMinorista` quedó en 5030) y la fila sin ningún precio se salteó. Después se volvió a correr el Excel completo y staging quedó igual que después de la primera pasada (4485 con `precioMinorista = 2480` otra vez).
 
 **Pantalla:** se probó con Chrome headless subiendo los Excel desde `http://localhost:3001/`. Se ven las stats nuevas, los colores, las listas y la línea gris.
+
+## Producción (brief 05b, 2026-11-24)
+
+### Frenos chequeados (16:24, martes — no es jueves ~17 h)
+1. `origin/feature/nanoya-server` existe; último commit `1d89e0d feat(nanoya): canal en pedidos y actualizador con precio al público`. ✅
+2. `git diff --stat origin/main...origin/feature/nanoya-server`: solo `docs/avances/nanoya-05-server.md`, `index.js`, `public/index.html`. ✅
+3. `git diff --stat origin/develop origin/main`: vacío (y sin commits de diferencia en ninguno de los dos sentidos). ✅
+4. `node --check index.js` en `feature/nanoya-server`: OK. ✅
+5. `gh auth status`: sesión activa; `main` sin protección de rama, permiso ADMIN. ✅
+
+### Desvío: la URL del server en producción
+La URL del brief y de `CLAUDE.md` (`https://nano-server-h25x.onrender.com`) **ya no existe**: responde 404 en todas las rutas (incluida `/`) con el header `x-render-routing: no-server`, o sea que Render no tiene ningún servicio en ese hostname. La instancia real es **`https://nano-server-avac.onrender.com`**: es la que usa nano-web en `main` (`SERVER_URL` con fallback, commit `50200eb` "fallback a nueva instancia Render"). Antes de mergear confirmé que `avac` sirve exactamente el `public/index.html` de `origin/main` (comparación byte a byte). Todas las verificaciones de abajo son contra `avac`.
+
+### Línea base (antes del merge, 16:25)
+- `/pedidos?desde=2026-11-24&hasta=2026-11-24` → 200, 1 pedido, ninguno con `canal`.
+- `/pedidos?desde=2026-11-22&hasta=2026-11-24` → 200, 12 pedidos, ninguno con `canal`.
+- `...&canal=xx` → 200 (el código viejo ignora el parámetro).
+
+### PRs y merge
+- PR #3 `feature/nanoya-server` → `develop`, merge común → `30a5477`.
+- PR #4 `develop` → `main`, merge común → **`39fd782`** (`39fd782381e66b1422c956b39a59fd29a797d878`), 16:26:21.
+
+### Deploy de Render: NO se deployó
+Sondeo cada 1 minuto, de 16:26 a 16:36 (11 intentos), con `/pedidos?desde=2026-11-22&hasta=2026-11-24`: **siempre 200, 12 pedidos, ninguno con `canal`**. A los 16:36:
+- `...&canal=xx` → **200** (tendría que dar 400 `canal inválido`): sigue el código viejo.
+- `...&canal=mayorista` → 200.
+- El `/` en vivo sigue siendo el `index.html` de antes del merge.
+
+El server nunca dejó de responder 200, así que **no se revirtió** (según el brief, sin revert ni reintento). `main` y `develop` quedan en `39fd782` / `30a5477` con el cambio mergeado, pero en Render sigue corriendo el commit anterior.
+
+**Acción para Santiago:** entrar al dashboard de Render, al servicio **`nano-server-avac`**, y hacer "Manual Deploy" del último commit de `main` (`39fd782`). Después, verificar:
+- `/pedidos?desde=…&hasta=…` → 200 y los pedidos traen `"canal"`;
+- `...&canal=xx` → 400 `canal inválido`;
+- `...&canal=mayorista` → 200.
+
+### Chequeo de `idSistema` duplicados en production (solo lectura)
+`node -e` con `@sanity/client`, `dataset: 'production'` fijo y solo `client.fetch`: `*[_type == "producto" && defined(idSistema)]{ _id, idSistema, nombre, precio, enStock }`. 1.341 docs (136 de ellos `drafts.`), 1.338 `idSistema` distintos, **3 repetidos** (ninguno es un par draft/publicado):
+
+| idSistema | `_id` | nombre | precio | enStock |
+|---|---|---|---|---|
+| 1932 | `00e9a0be-0485-4536-81fc-25d66d8a2711` | AC PLUSBELLE KIDS 700ML FUERZA NATURAL | 6164345 | false |
+| 1932 | `4361a2a5-c773-4e75-b384-75060e351c29` | AC PLUSBELLE KIDS 700ML FUERZA NATURAL | 7559 | true |
+| 5162 | `7e950338-1b6c-4847-948c-05a2c1bcdc3e` | ORAL B KIDS MICKEY X2 EXTRA SUAVE | 5197 | false |
+| 5162 | `e849bdae-3149-4408-ab66-119977774e40` | ORAL B X2 LIMPIEZA PROFUNDA SUAVE | 6939 | false |
+| 5541 | `8ca0c9a3-6cc5-420b-8416-fc5b368dc3c7` | CAROCUORE CUORE DESODORANTE 123ML | 3379 | true |
+| 5541 | `e767d823-4409-46f5-aaba-1cfe98461be7` | CARO CUORE AMORE DESODORANTE 123ML | 4241 | true |
+
+Notas: en 1932, uno de los docs tiene precio 6.164.345 (parece un dato corrupto; está sin stock). En 5162 y 5541 son **productos distintos** con el mismo `idSistema`, no copias del mismo producto. No se borró ni editó nada; la limpieza va en otro brief.
+
+### Pendientes
+- Manual Deploy en Render (arriba). Hasta que se haga, producción no tiene `canal` ni el actualizador nuevo.
+- `CLAUDE.md` sigue con la URL vieja `nano-server-h25x`; conviene corregirla a `nano-server-avac` (no se tocó, queda fuera del alcance de este brief).
